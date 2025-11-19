@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Requests - SkillSwap</title>
+    <link rel="stylesheet" href="/skillswap/css/style.css">
+</head>
+<body>
+    <nav>
+        <div class="nav-container">
+            <a href="/skillswap/index.html" class="logo">🔄 SkillSwap</a>
+            <ul class="nav-links">
+                <li><a href="/skillswap/dashboard.html">Dashboard</a></li>
+                <li><a href="/skillswap/profile.html">Profile</a></li>
+                <li><a href="/skillswap/matches.html">Matches</a></li>
+                <li><a href="/skillswap/chatRequests.html">Chat Requests</a></li>
+                <li><a href="#" onclick="logout()">Logout</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h1>Chat Requests</h1>
+        <div id="alert-container"></div>
+
+        <div class="card">
+            <h2 class="card-header">Pending Requests</h2>
+            <div id="pendingRequests"></div>
+        </div>
+
+        <div class="card mt-20">
+            <h2 class="card-header">All Chat Requests</h2>
+            <div id="allRequests"></div>
+        </div>
+    </div>
+
+    <script src="/skillswap/js/api.js"></script>
+    <script>
+        async function loadChatRequests() {
+            try {
+                const pending = await chatRequestAPI.getPending();
+                const pendingContainer = document.getElementById('pendingRequests');
+                
+                if (pending.length === 0) {
+                    pendingContainer.innerHTML = '<p>No pending chat requests.</p>';
+                } else {
+                    pendingContainer.innerHTML = pending.map(request => `
+                        <div class="chat-request-card">
+                            <h4>From: ${request.fromUser.name}</h4>
+                            <p><strong>Message:</strong> ${request.message || 'No message'}</p>
+                            ${request.match ? `<p><strong>Match:</strong> ${request.match.matchId}</p>` : ''}
+                            <p><strong>Status:</strong> <span class="alert alert-warning">${request.status}</span></p>
+                            <p><strong>Date:</strong> ${formatDate(request.createdAt)}</p>
+                            <div style="margin-top: 15px;">
+                                <button onclick="acceptChatRequest(${request.requestId})" class="btn btn-success">Accept</button>
+                                <button onclick="declineChatRequest(${request.requestId})" class="btn btn-danger" style="margin-left: 10px;">Decline</button>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+
+                const all = await chatRequestAPI.getMyRequests();
+                const allContainer = document.getElementById('allRequests');
+                
+                if (all.length === 0) {
+                    allContainer.innerHTML = '<p>No chat requests.</p>';
+                } else {
+                    allContainer.innerHTML = all.map(request => {
+                        let statusClass = '';
+                        if (request.status === 'ACCEPTED') {
+                            statusClass = 'alert alert-success';
+                        } else if (request.status === 'DECLINED') {
+                            statusClass = 'alert alert-danger';
+                        } else {
+                            statusClass = 'alert alert-warning';
+                        }
+
+                        return `
+                            <div class="chat-request-card ${request.status.toLowerCase()}">
+                                <h4>${request.fromUser.userId === (getAuthInfo()?.userId) ? 'To: ' + request.toUser.name : 'From: ' + request.fromUser.name}</h4>
+                                <p><strong>Message:</strong> ${request.message || 'No message'}</p>
+                                <p><strong>Status:</strong> <span class="${statusClass}">${request.status}</span></p>
+                                <p><strong>Date:</strong> ${formatDate(request.createdAt)}</p>
+                            </div>
+                        `;
+                    }).join('');
+                }
+            } catch (error) {
+                console.error('Error loading chat requests:', error);
+                showAlert('Failed to load chat requests', 'danger');
+            }
+        }
+
+        async function acceptChatRequest(requestId) {
+            try {
+                const response = await chatRequestAPI.accept(requestId);
+                if (response.success) {
+                    showAlert('Chat request accepted!', 'success');
+                    loadChatRequests();
+                }
+            } catch (error) {
+                showAlert('Failed to accept chat request', 'danger');
+                console.error('Error accepting chat request:', error);
+            }
+        }
+
+        async function declineChatRequest(requestId) {
+            if (!confirm('Decline this chat request?')) return;
+            try {
+                const response = await chatRequestAPI.decline(requestId);
+                if (response.success) {
+                    showAlert('Chat request declined', 'success');
+                    loadChatRequests();
+                }
+            } catch (error) {
+                showAlert('Failed to decline chat request', 'danger');
+                console.error('Error declining chat request:', error);
+            }
+        }
+
+        async function logout() {
+            try {
+                await userAPI.logout();
+                clearAuthInfo();
+                window.location.href = '/skillswap/index.html';
+            } catch (error) {
+                clearAuthInfo();
+                window.location.href = '/skillswap/index.html';
+            }
+        }
+
+        loadChatRequests();
+    </script>
+</body>
+</html>
+

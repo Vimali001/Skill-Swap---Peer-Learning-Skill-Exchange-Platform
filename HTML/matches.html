@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Matches - SkillSwap</title>
+    <link rel="stylesheet" href="/skillswap/css/style.css">
+</head>
+<body>
+    <nav>
+        <div class="nav-container">
+            <a href="/skillswap/index.html" class="logo">🔄 SkillSwap</a>
+            <ul class="nav-links">
+                <li><a href="/skillswap/dashboard.html">Dashboard</a></li>
+                <li><a href="/skillswap/profile.html">Profile</a></li>
+                <li><a href="/skillswap/matches.html">Matches</a></li>
+                <li><a href="/skillswap/chatRequests.html">Chat Requests</a></li>
+                <li><a href="#" onclick="logout()">Logout</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h1>Find Skill Exchange Matches</h1>
+        <div id="alert-container"></div>
+
+        <div class="card">
+            <p>These are users who match your skill exchange needs!</p>
+            <div id="matches" class="match-grid mt-20"></div>
+        </div>
+
+        <div class="card mt-20">
+            <h2 class="card-header">My Matches</h2>
+            <div id="myMatches" class="match-grid mt-20"></div>
+        </div>
+    </div>
+
+    <script src="/skillswap/js/api.js"></script>
+    <script>
+        async function loadMatches() {
+            try {
+                const matches = await matchAPI.findMatches();
+                const container = document.getElementById('matches');
+                
+                if (matches.length === 0) {
+                    container.innerHTML = '<p>No matches found. Update your profile with skills you can teach and want to learn!</p>';
+                } else {
+                    container.innerHTML = matches.map(match => `
+                        <div class="match-card">
+                            <h4>${match.user.name}</h4>
+                            <p><strong>Location:</strong> ${match.user.location || 'Not specified'}</p>
+                            <p><strong>Bio:</strong> ${match.user.bio || 'No bio'}</p>
+                            <p><strong>Can teach you:</strong> <span class="skill-tag">${match.canTeach}</span></p>
+                            <p><strong>Wants to learn:</strong> <span class="skill-tag skill-tag-learn">${match.wantsToLearn}</span></p>
+                            <button onclick="createMatch(${match.user.userId}, ${match.skillTeachId}, ${match.skillLearnId})" 
+                                    class="btn btn-primary btn-block mt-20">Send Match Request</button>
+                        </div>
+                    `).join('');
+                }
+
+                // Load my matches
+                const myMatches = await matchAPI.getMyMatches();
+                const myMatchesContainer = document.getElementById('myMatches');
+                
+                if (myMatches.length === 0) {
+                    myMatchesContainer.innerHTML = '<p>No match requests yet.</p>';
+                } else {
+                    myMatchesContainer.innerHTML = myMatches.map(match => {
+                        const otherUser = match.user1.userId === (getAuthInfo()?.userId) ? match.user2 : match.user1;
+                        let statusClass = '';
+                        let statusActions = '';
+                        
+                        if (match.status === 'PENDING') {
+                            if (match.user2.userId === (getAuthInfo()?.userId)) {
+                                statusActions = `
+                                    <button onclick="acceptMatch(${match.matchId})" class="btn btn-success btn-sm">Accept</button>
+                                    <button onclick="rejectMatch(${match.matchId})" class="btn btn-danger btn-sm">Reject</button>
+                                `;
+                            } else {
+                                statusActions = '<span class="alert alert-warning">Pending...</span>';
+                            }
+                        } else if (match.status === 'ACCEPTED') {
+                            statusClass = 'alert alert-success';
+                            statusActions = `<button onclick="sendChatRequest(${otherUser.userId}, ${match.matchId})" class="btn btn-primary btn-sm">Send Chat Request</button>`;
+                        } else {
+                            statusClass = 'alert alert-danger';
+                        }
+
+                        return `
+                            <div class="match-card">
+                                <h4>${otherUser.name}</h4>
+                                <p><strong>Status:</strong> <span class="${statusClass}">${match.status}</span></p>
+                                <p><strong>You teach:</strong> ${match.skillTeachUser1 ? match.skillTeachUser1.skillName : 'N/A'}</p>
+                                <p><strong>They teach:</strong> ${match.skillTeachUser2 ? match.skillTeachUser2.skillName : 'N/A'}</p>
+                                <div style="margin-top: 15px;">${statusActions}</div>
+                            </div>
+                        `;
+                    }).join('');
+                }
+            } catch (error) {
+                console.error('Error loading matches:', error);
+                showAlert('Failed to load matches', 'danger');
+            }
+        }
+
+        async function createMatch(user2Id, skillTeachUser1Id, skillTeachUser2Id) {
+            try {
+                const response = await matchAPI.createMatch(user2Id, skillTeachUser1Id, skillTeachUser2Id);
+                if (response.success) {
+                    showAlert('Match request sent successfully!', 'success');
+                    loadMatches();
+                } else {
+                    showAlert(response.message, 'danger');
+                }
+            } catch (error) {
+                showAlert('Failed to create match', 'danger');
+                console.error('Error creating match:', error);
+            }
+        }
+
+        async function acceptMatch(matchId) {
+            try {
+                const response = await matchAPI.accept(matchId);
+                if (response.success) {
+                    showAlert('Match accepted!', 'success');
+                    loadMatches();
+                }
+            } catch (error) {
+                showAlert('Failed to accept match', 'danger');
+                console.error('Error accepting match:', error);
+            }
+        }
+
+        async function rejectMatch(matchId) {
+            if (!confirm('Reject this match?')) return;
+            try {
+                const response = await matchAPI.reject(matchId);
+                if (response.success) {
+                    showAlert('Match rejected', 'success');
+                    loadMatches();
+                }
+            } catch (error) {
+                showAlert('Failed to reject match', 'danger');
+                console.error('Error rejecting match:', error);
+            }
+        }
+
+        async function sendChatRequest(toUserId, matchId) {
+            const message = prompt('Enter a message for the chat request:');
+            if (!message) return;
+            
+            try {
+                const response = await chatRequestAPI.create(toUserId, matchId, message);
+                if (response.success) {
+                    showAlert('Chat request sent!', 'success');
+                }
+            } catch (error) {
+                showAlert('Failed to send chat request', 'danger');
+                console.error('Error sending chat request:', error);
+            }
+        }
+
+        async function logout() {
+            try {
+                await userAPI.logout();
+                clearAuthInfo();
+                window.location.href = '/skillswap/index.html';
+            } catch (error) {
+                clearAuthInfo();
+                window.location.href = '/skillswap/index.html';
+            }
+        }
+
+        loadMatches();
+    </script>
+</body>
+</html>
+

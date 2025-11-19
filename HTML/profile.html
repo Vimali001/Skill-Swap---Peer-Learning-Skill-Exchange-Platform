@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profile - SkillSwap</title>
+    <link rel="stylesheet" href="/skillswap/css/style.css">
+</head>
+<body>
+    <nav>
+        <div class="nav-container">
+            <a href="/skillswap/index.html" class="logo">🔄 SkillSwap</a>
+            <ul class="nav-links">
+                <li><a href="/skillswap/dashboard.html">Dashboard</a></li>
+                <li><a href="/skillswap/profile.html">Profile</a></li>
+                <li><a href="/skillswap/matches.html">Matches</a></li>
+                <li><a href="/skillswap/chatRequests.html">Chat Requests</a></li>
+                <li><a href="#" onclick="logout()">Logout</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h1>My Profile</h1>
+        <div id="alert-container"></div>
+
+        <div class="card">
+            <h2 class="card-header">Profile Information</h2>
+            <form id="profileForm">
+                <div class="form-group">
+                    <label for="bio">Bio:</label>
+                    <textarea id="bio" name="bio" rows="4" placeholder="Tell us about yourself"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="location">Location:</label>
+                    <input type="text" id="location" name="location" placeholder="City / Region">
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-block">Update Profile</button>
+            </form>
+        </div>
+
+        <div class="card mt-20">
+            <h2 class="card-header">Skills I Can Teach</h2>
+            <div id="skillsTeach" class="skill-list"></div>
+            <div class="form-group mt-20">
+                <label for="addSkillTeach">Add Skill to Teach:</label>
+                <select id="addSkillTeach">
+                    <option value="">Select a skill...</option>
+                </select>
+                <button onclick="addSkillTeach()" class="btn btn-success mt-20">Add Skill</button>
+            </div>
+        </div>
+
+        <div class="card mt-20">
+            <h2 class="card-header">Skills I Want to Learn</h2>
+            <div id="skillsLearn" class="skill-list"></div>
+            <div class="form-group mt-20">
+                <label for="addSkillLearn">Add Skill to Learn:</label>
+                <select id="addSkillLearn">
+                    <option value="">Select a skill...</option>
+                </select>
+                <button onclick="addSkillLearn()" class="btn btn-success mt-20">Add Skill</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/skillswap/js/api.js"></script>
+    <script>
+        let allSkills = [];
+
+        async function loadProfile() {
+            try {
+                const user = await userAPI.getCurrent();
+                if (user) {
+                    document.getElementById('bio').value = user.bio || '';
+                    document.getElementById('location').value = user.location || '';
+                }
+
+                // Load skills
+                allSkills = await skillAPI.getAll();
+                const teachSelect = document.getElementById('addSkillTeach');
+                const learnSelect = document.getElementById('addSkillLearn');
+                
+                teachSelect.innerHTML = '<option value="">Select a skill...</option>' + 
+                    allSkills.map(s => `<option value="${s.skillId}">${s.skillName}</option>`).join('');
+                learnSelect.innerHTML = '<option value="">Select a skill...</option>' + 
+                    allSkills.map(s => `<option value="${s.skillId}">${s.skillName}</option>`).join('');
+
+                // Load user skills
+                loadSkillsTeach();
+                loadSkillsLearn();
+            } catch (error) {
+                console.error('Error loading profile:', error);
+                window.location.href = '/skillswap/login.html';
+            }
+        }
+
+        async function loadSkillsTeach() {
+            try {
+                const skills = await profileAPI.getSkillsTeach();
+                const container = document.getElementById('skillsTeach');
+                if (skills.length === 0) {
+                    container.innerHTML = '<p>No skills added yet. Add skills you can teach!</p>';
+                } else {
+                    container.innerHTML = skills.map(s => `
+                        <div class="skill-item">
+                            <span class="skill-tag skill-tag-teach">${s.skill.skillName}</span>
+                            <button onclick="removeSkillTeach(${s.skill.skillId})" class="btn btn-danger btn-sm" style="margin-left: 10px;">Remove</button>
+                        </div>
+                    `).join('');
+                }
+            } catch (error) {
+                console.error('Error loading skills teach:', error);
+            }
+        }
+
+        async function loadSkillsLearn() {
+            try {
+                const skills = await profileAPI.getSkillsLearn();
+                const container = document.getElementById('skillsLearn');
+                if (skills.length === 0) {
+                    container.innerHTML = '<p>No skills added yet. Add skills you want to learn!</p>';
+                } else {
+                    container.innerHTML = skills.map(s => `
+                        <div class="skill-item">
+                            <span class="skill-tag skill-tag-learn">${s.skill.skillName}</span>
+                            <button onclick="removeSkillLearn(${s.skill.skillId})" class="btn btn-danger btn-sm" style="margin-left: 10px;">Remove</button>
+                        </div>
+                    `).join('');
+                }
+            } catch (error) {
+                console.error('Error loading skills learn:', error);
+            }
+        }
+
+        document.getElementById('profileForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const alertContainer = document.getElementById('alert-container');
+            try {
+                const bio = document.getElementById('bio').value;
+                const location = document.getElementById('location').value;
+                const response = await profileAPI.update(bio, location);
+                if (response.success) {
+                    showAlert('Profile updated successfully!', 'success');
+                }
+            } catch (error) {
+                showAlert('Failed to update profile', 'danger');
+                console.error('Error updating profile:', error);
+            }
+        });
+
+        async function addSkillTeach() {
+            const skillId = document.getElementById('addSkillTeach').value;
+            if (!skillId) {
+                showAlert('Please select a skill', 'warning');
+                return;
+            }
+            try {
+                await profileAPI.addSkillToTeach(parseInt(skillId));
+                loadSkillsTeach();
+                document.getElementById('addSkillTeach').value = '';
+                showAlert('Skill added successfully!', 'success');
+            } catch (error) {
+                showAlert('Failed to add skill', 'danger');
+                console.error('Error adding skill:', error);
+            }
+        }
+
+        async function addSkillLearn() {
+            const skillId = document.getElementById('addSkillLearn').value;
+            if (!skillId) {
+                showAlert('Please select a skill', 'warning');
+                return;
+            }
+            try {
+                await profileAPI.addSkillToLearn(parseInt(skillId));
+                loadSkillsLearn();
+                document.getElementById('addSkillLearn').value = '';
+                showAlert('Skill added successfully!', 'success');
+            } catch (error) {
+                showAlert('Failed to add skill', 'danger');
+                console.error('Error adding skill:', error);
+            }
+        }
+
+        async function removeSkillTeach(skillId) {
+            if (!confirm('Remove this skill from your teach list?')) return;
+            try {
+                await profileAPI.removeSkillFromTeach(skillId);
+                loadSkillsTeach();
+                showAlert('Skill removed successfully!', 'success');
+            } catch (error) {
+                showAlert('Failed to remove skill', 'danger');
+                console.error('Error removing skill:', error);
+            }
+        }
+
+        async function removeSkillLearn(skillId) {
+            if (!confirm('Remove this skill from your learn list?')) return;
+            try {
+                await profileAPI.removeSkillFromLearn(skillId);
+                loadSkillsLearn();
+                showAlert('Skill removed successfully!', 'success');
+            } catch (error) {
+                showAlert('Failed to remove skill', 'danger');
+                console.error('Error removing skill:', error);
+            }
+        }
+
+        async function logout() {
+            try {
+                await userAPI.logout();
+                clearAuthInfo();
+                window.location.href = '/skillswap/index.html';
+            } catch (error) {
+                clearAuthInfo();
+                window.location.href = '/skillswap/index.html';
+            }
+        }
+
+        loadProfile();
+    </script>
+</body>
+</html>
+
